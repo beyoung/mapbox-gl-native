@@ -7,6 +7,7 @@
 #include <mbgl/programs/attributes.hpp>
 #include <mbgl/programs/program_parameters.hpp>
 #include <mbgl/style/paint_property.hpp>
+#include <mbgl/renderer/paint_property_binder.hpp>
 #include <mbgl/shaders/shaders.hpp>
 #include <mbgl/util/io.hpp>
 
@@ -16,22 +17,22 @@ namespace mbgl {
 
 template <class Shaders,
           class Primitive,
-          class LayoutAttrs,
+          class LayoutAttributeTypeList,
           class UniformTypeList,
           class PaintProps>
 class Program {
 public:
-    using LayoutAttributes = LayoutAttrs;
-    using LayoutVertex = typename LayoutAttributes::Vertex;
+    using LayoutAttributes = gl::Attributes<LayoutAttributeTypeList>;
+    using LayoutVertex = gfx::Vertex<LayoutAttributeTypeList>;
 
     using PaintProperties = PaintProps;
-    using PaintPropertyBinders = typename PaintProperties::Binders;
-    using PaintAttributes = typename PaintPropertyBinders::Attributes;
-    using Attributes = gl::ConcatenateAttributes<LayoutAttributes, PaintAttributes>;
+    using PaintPropertyBinders = PaintPropertyBinders<typename PaintProperties::DataDrivenProperties>;
+    using PaintAttributeTypeList = typename PaintPropertyBinders::AttributeTypeList;
+    using Attributes = gl::Attributes<TypeListConcat<LayoutAttributeTypeList, PaintAttributeTypeList>>;
 
     using UniformValues = gfx::UniformValues<UniformTypeList>;
     using PaintUniformTypeList = typename PaintPropertyBinders::UniformTypeList;
-    using AllUniforms = typename TypeListConcat<UniformTypeList, PaintUniformTypeList>::template ExpandInto<gl::Uniforms>;
+    using AllUniforms = gl::Uniforms<TypeListConcat<UniformTypeList, PaintUniformTypeList>>;
 
     using ProgramType = gl::Program<Primitive, Attributes, AllUniforms>;
 

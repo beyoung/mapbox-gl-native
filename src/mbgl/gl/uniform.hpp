@@ -51,8 +51,11 @@ public:
 
 UniformLocation uniformLocation(ProgramID, const char * name);
 
+template <class>
+class Uniforms;
+
 template <class... Us>
-class Uniforms final {
+class Uniforms<TypeList<Us...>> final {
 public:
     using Types = TypeList<Us...>;
     using State = IndexedTuple<TypeList<Us...>, TypeList<UniformState<Us>...>>;
@@ -88,9 +91,6 @@ public:
         util::ignore({ (state.template get<Us>() = values.template get<Us>(), 0)... });
     }
 };
-
-template <class... Us>
-using ConcatenateUniforms = typename TypeListConcat<typename Us::Types...>::template ExpandInto<Uniforms>;
 
 } // namespace gl
 } // namespace mbgl

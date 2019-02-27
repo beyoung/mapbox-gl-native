@@ -33,10 +33,10 @@ public:
     using Type = T;
     static constexpr bool IsDataDriven = true;
 
-    using Attribute = A;
-    using Attributes = TypeList<A>;
-    using Uniform = U;
-    using Uniforms = TypeList<U>;
+    using AttributeType = A;
+    using AttributeTypeList = TypeList<A>;
+    using UniformType = U;
+    using UniformTypeList = TypeList<U>;
 };
 
 template <class T, class A1, class U1, class A2, class U2>
@@ -49,10 +49,10 @@ public:
     using Type = T;
     static constexpr bool IsDataDriven = true;
 
-    using Attribute = A1;
-    using Attributes = TypeList<A1, A2>;
-    using Uniforms = TypeList<U1, U2>;
-    using Uniform = U1;
+    using AttributeType = A1;
+    using AttributeTypeList = TypeList<A1, A2>;
+    using UniformType = U1;
+    using UniformTypeList = TypeList<U1, U2>;
 };
 
 template <class T>

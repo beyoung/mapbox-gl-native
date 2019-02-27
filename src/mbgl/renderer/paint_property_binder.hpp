@@ -24,11 +24,28 @@ namespace mbgl {
    between zoom levels, without the need to repopulate vertex buffers each frame as the map is
    being zoomed.
 */
-template <class A>
-using ZoomInterpolatedAttributeType = gl::Attribute<typename A::ValueType, A::Dimensions * 2>;
+template <class Attr>
+struct ZoomInterpolatedAttributeType {
+    using ValueType = typename Attr::ValueType;
+    static constexpr size_t Dimensions = Attr::Dimensions * 2;
+    using Value = std::array<ValueType, Dimensions>;
+    static auto name() {
+        return Attr::name();
+    }
+};
 
 inline std::array<float, 1> attributeValue(float v) {
     return {{ v }};
+}
+
+/*
+ * Pack a pair of values, interpreted as uint8's, into a single float.
+ * Used to conserve vertex attributes. Values are unpacked in the vertex
+ * shader using the `unpack_float()` function, defined in _prelude.vertex.glsl.
+ */
+template <typename T>
+inline uint16_t packUint8Pair(T a, T b) {
+    return static_cast<uint16_t>(a) * 256 + static_cast<uint16_t>(b);
 }
 
 /*
@@ -40,8 +57,8 @@ inline std::array<float, 1> attributeValue(float v) {
 */
 inline std::array<float, 2> attributeValue(const Color& color) {
     return {{
-        static_cast<float>(mbgl::attributes::packUint8Pair(255 * color.r, 255 * color.g)),
-        static_cast<float>(mbgl::attributes::packUint8Pair(255 * color.b, 255 * color.a))
+        static_cast<float>(packUint8Pair(255 * color.r, 255 * color.g)),
+        static_cast<float>(packUint8Pair(255 * color.b, 255 * color.a))
     }};
 }
 
@@ -163,8 +180,8 @@ private:
 template <class T, class A>
 class SourceFunctionPaintPropertyBinder : public PaintPropertyBinder<T, T, PossiblyEvaluatedPropertyValue<T>, A> {
 public:
-    using BaseAttribute = A;
-    using BaseVertex = gl::detail::Vertex<BaseAttribute>;
+    using BaseAttributeType = A;
+    using BaseVertex = gfx::Vertex<TypeList<BaseAttributeType>>;
 
     using AttributeType = ZoomInterpolatedAttributeType<A>;
 
@@ -190,7 +207,7 @@ public:
         if (currentValue.isConstant()) {
             return {};
         } else {
-            return std::tuple<optional<gl::AttributeBinding>> { AttributeType::binding(*vertexBuffer, 0, BaseAttribute::Dimensions) };
+            return std::tuple<optional<gl::AttributeBinding>> { gl::attributeBinding<AttributeType>(*vertexBuffer, 0, BaseAttributeType::Dimensions) };
         }
     }
 
@@ -220,7 +237,7 @@ public:
 
     using AttributeType = ZoomInterpolatedAttributeType<A>;
     using AttributeValue = typename AttributeType::Value;
-    using Vertex = gl::detail::Vertex<AttributeType>;
+    using Vertex = gfx::Vertex<TypeList<AttributeType>>;
 
     CompositeFunctionPaintPropertyBinder(style::PropertyExpression<T> expression_, float zoom, T defaultValue_)
         : expression(std::move(expression_)),
@@ -248,7 +265,7 @@ public:
         if (currentValue.isConstant()) {
             return {};
         } else {
-            return std::tuple<optional<gl::AttributeBinding>> { AttributeType::binding(*vertexBuffer, 0) };
+            return std::tuple<optional<gl::AttributeBinding>> { gl::attributeBinding<AttributeType>(*vertexBuffer, 0) };
         }
     }
 
@@ -283,14 +300,14 @@ public:
     using AttributeType = ZoomInterpolatedAttributeType<A1>;
     using AttributeType2 = ZoomInterpolatedAttributeType<A2>;
 
-    using BaseAttribute = A1;
-    using BaseAttributeValue = typename BaseAttribute::Value;
+    using BaseAttributeType = A1;
+    using BaseAttributeValue = typename BaseAttributeType::Value;
 
-    using BaseAttribute2 = A2;
-    using BaseAttributeValue2 = typename BaseAttribute2::Value;
+    using BaseAttributeType2 = A2;
+    using BaseAttributeValue2 = typename BaseAttributeType2::Value;
 
-    using Vertex = gl::detail::Vertex<BaseAttribute>;
-    using Vertex2 = gl::detail::Vertex<BaseAttribute2>;
+    using Vertex = gfx::Vertex<TypeList<BaseAttributeType>>;
+    using Vertex2 = gfx::Vertex<TypeList<BaseAttributeType2>>;
 
     CompositeCrossFadedPaintPropertyBinder(style::PropertyExpression<T> expression_, float zoom, T defaultValue_)
         : expression(std::move(expression_)),
@@ -344,10 +361,10 @@ public:
             return {};
         } else {
             return std::tuple<optional<gl::AttributeBinding>, optional<gl::AttributeBinding>> {
-                AttributeType::binding(*patternToVertexBuffer, 0, BaseAttribute::Dimensions),
-                AttributeType2::binding(
+                gl::attributeBinding<AttributeType>(*patternToVertexBuffer, 0, BaseAttributeType::Dimensions),
+                gl::attributeBinding<AttributeType2>(
                     crossfade.fromScale == 2 ? *zoomInVertexBuffer : *zoomOutVertexBuffer,
-                    0, BaseAttribute2::Dimensions) };
+                    0, BaseAttributeType2::Dimensions) };
         }
     }
 
@@ -414,12 +431,6 @@ PaintPropertyBinder<T, UniformValueType, PossiblyEvaluatedType, As...>::create(c
 }
 
 template <class Attr>
-struct ZoomInterpolatedAttribute {
-    static auto name() { return Attr::name(); }
-    using Type = ZoomInterpolatedAttributeType<typename Attr::Type>;
-};
-
-template <class Attr>
 struct InterpolationUniformType {
     using Value = float;
     static auto name() {
@@ -439,13 +450,13 @@ private:
 
     template <class T, class UniformValueType, class PossiblyEvaluatedType, class... As>
     struct Detail<T, UniformValueType, PossiblyEvaluatedType, TypeList<As...>> {
-        using Binder = PaintPropertyBinder<T, UniformValueType, PossiblyEvaluatedType, typename As::Type...>;
-        using ZoomInterpolatedAttributeList = TypeList<ZoomInterpolatedAttribute<As>...>;
+        using Binder = PaintPropertyBinder<T, UniformValueType, PossiblyEvaluatedType, As...>;
+        using ZoomInterpolatedAttributeTypeList = TypeList<ZoomInterpolatedAttributeType<As>...>;
         using InterpolationUniformTypeList = TypeList<InterpolationUniformType<As>...>;
     };
 
     template <class P>
-    using Property = Detail<typename P::Type, typename P::Uniform::Value, typename P::PossiblyEvaluatedType, typename P::Attributes>;
+    using Property = Detail<typename P::Type, typename P::UniformType::Value, typename P::PossiblyEvaluatedType, typename P::AttributeTypeList>;
 
 public:
     template <class P>
@@ -483,11 +494,12 @@ public:
     }
 
     template <class P>
-    using ZoomInterpolatedAttributeList = typename Property<P>::ZoomInterpolatedAttributeList;
+    using ZoomInterpolatedAttributeTypeList = typename Property<P>::ZoomInterpolatedAttributeTypeList;
     template <class P>
     using InterpolationUniformTypeList = typename Property<P>::InterpolationUniformTypeList;
 
-    using Attributes = typename TypeListConcat<ZoomInterpolatedAttributeList<Ps>...>::template ExpandInto<gl::Attributes>;
+    using AttributeTypeList = TypeListConcat<ZoomInterpolatedAttributeTypeList<Ps>...>;
+    using Attributes = gl::Attributes<AttributeTypeList>;
     using AttributeBindings = typename Attributes::Bindings;
 
     template <class EvaluatedProperties>
@@ -497,9 +509,9 @@ public:
         ) };
     }
 
-    using UniformTypeList = TypeListConcat<InterpolationUniformTypeList<Ps>..., typename Ps::Uniforms...>;
+    using UniformTypeList = TypeListConcat<InterpolationUniformTypeList<Ps>..., typename Ps::UniformTypeList...>;
     using UniformValues = gfx::UniformValues<UniformTypeList>;
-    using Uniforms = typename UniformTypeList::template ExpandInto<gl::Uniforms>;
+    using Uniforms = gl::Uniforms<UniformTypeList>;
 
     template <class EvaluatedProperties>
     UniformValues uniformValues(float currentZoom, EvaluatedProperties& currentProperties) const {
@@ -547,7 +559,7 @@ public:
         std::vector<std::string> result;
         util::ignore({
             (currentProperties.template get<Ps>().isConstant()
-                ? UniformDefines<typename Ps::Uniforms>::appendDefines(result)
+                ? UniformDefines<typename Ps::UniformTypeList>::appendDefines(result)
                 : (void) 0, 0)...
         });
         return result;
